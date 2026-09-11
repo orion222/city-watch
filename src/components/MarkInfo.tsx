@@ -31,7 +31,8 @@ export default function MapInfoPanel() {
     return false;
   });
   const { allMarkers, activeMarker, setMarkers } = useMarkers();
-  const [state, setState] = useState("Mark Info")
+  const [state, setState] = useState("Mark Info");
+  const [isImageModalOpen, setIsImageModalOpen] = useState(false);
   const [filters, setFilters] = useState({
     date: "",
     category: "",
@@ -133,6 +134,32 @@ export default function MapInfoPanel() {
             {state === "Mark Info" ? (
               <>
                 <div className="flex flex-col space-y-2">
+                  {activeMarker?.image_url && (
+                    <div className="mb-4 flex flex-col">
+                      <Label className="text-sm font-semibold text-gray-700 mb-1.5">
+                        Incident Photo:
+                      </Label>
+                      <div
+                        className="relative w-full h-36 rounded-xl overflow-hidden bg-black/5 border border-border/30 cursor-pointer group"
+                        onClick={() => setIsImageModalOpen(true)}
+                        title="Click to expand photo"
+                      >
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={activeMarker.image_url}
+                          alt={activeMarker.title || "Incident photo"}
+                          className="w-full h-full object-cover transition-transform duration-200 group-hover:scale-105"
+                          loading="lazy"
+                        />
+                        <div className="absolute inset-0 bg-black/0 group-hover:bg-black/25 transition-colors flex items-center justify-center opacity-0 group-hover:opacity-100">
+                          <span className="text-xs bg-card/90 text-foreground px-2 py-1 rounded-md shadow-sm">
+                            Click to expand
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+
                   <div className='mb-4 flex flex-col'>
                     <Label className="text-sm font-semibold text-gray-700">Description:</Label>
                     <div className='text-sm text-gray-900'>{activeMarker?.description}</div>
@@ -240,6 +267,34 @@ export default function MapInfoPanel() {
         >
           <h1 className="text-base">+</h1>
         </Button>
+      )}
+
+      {/* Full Photo Modal */}
+      {isImageModalOpen && activeMarker?.image_url && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-xs p-4 animate-fadeIn"
+          onClick={() => setIsImageModalOpen(false)}
+        >
+          <div
+            className="relative max-w-2xl max-h-[85vh] overflow-hidden rounded-2xl bg-card p-2 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={activeMarker.image_url}
+              alt={activeMarker.title || "Incident photo full preview"}
+              className="max-h-[80vh] w-auto rounded-xl object-contain"
+            />
+            <button
+              type="button"
+              onClick={() => setIsImageModalOpen(false)}
+              className="absolute top-4 right-4 w-8 h-8 rounded-full bg-black/60 hover:bg-black text-white flex items-center justify-center shadow transition-colors"
+              aria-label="Close photo"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );
