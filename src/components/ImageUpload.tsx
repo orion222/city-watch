@@ -4,12 +4,20 @@ import { useState, useRef, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
-import { Camera, UploadCloud, X, Sparkles, Image as ImageIcon, RefreshCw } from "lucide-react";
+import {
+  Camera,
+  UploadCloud,
+  X,
+  Sparkles,
+  Image as ImageIcon,
+  RefreshCw,
+} from "lucide-react";
+import CameraModal from "@/components/CameraModal";
 
 interface ImageUploadProps {
-  value: File | null
-  onChange: (file: File | null) => void
-  disabled?: boolean
+  value: File | null;
+  onChange: (file: File | null) => void;
+  disabled?: boolean;
 }
 
 function formatFileSize(bytes: number): string {
@@ -18,9 +26,15 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-export default function ImageUpload({ value, onChange, disabled = false }: ImageUploadProps) {
+export default function ImageUpload({
+  value,
+  onChange,
+  disabled = false,
+}: ImageUploadProps) {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [isCameraOpen, setIsCameraOpen] = useState(false);
+
   const cameraInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -44,7 +58,7 @@ export default function ImageUpload({ value, onChange, disabled = false }: Image
       if (!file) return;
       onChange(file);
     },
-    [onChange]
+    [onChange],
   );
 
   const handleDrop = useCallback(
@@ -59,7 +73,7 @@ export default function ImageUpload({ value, onChange, disabled = false }: Image
         handleFile(droppedFile);
       }
     },
-    [disabled, handleFile]
+    [disabled, handleFile],
   );
 
   const handleDragOver = useCallback(
@@ -70,7 +84,7 @@ export default function ImageUpload({ value, onChange, disabled = false }: Image
         setIsDragging(true);
       }
     },
-    [disabled]
+    [disabled],
   );
 
   const handleDragLeave = useCallback((e: React.DragEvent<HTMLDivElement>) => {
@@ -85,12 +99,30 @@ export default function ImageUpload({ value, onChange, disabled = false }: Image
     if (cameraInputRef.current) cameraInputRef.current.value = "";
   };
 
+  const handleTakePhotoClick = () => {
+    if (disabled) return;
+    if (
+      typeof window !== "undefined" &&
+      typeof navigator?.mediaDevices?.getUserMedia === "function"
+    ) {
+      setIsCameraOpen(true);
+    } else {
+      // Fallback to native capture attribute on file input
+      cameraInputRef.current?.click();
+    }
+  };
+
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between">
-        <Label htmlFor="image-upload" className="text-sm font-semibold text-gray-700 flex items-center gap-1.5">
+        <Label
+          htmlFor="image-upload"
+          className="text-sm font-semibold text-gray-700 flex items-center gap-1.5"
+        >
           <span>Incident Photo</span>
-          <span className="text-xs font-light text-muted-foreground">(Optional)</span>
+          <span className="text-xs font-light text-muted-foreground">
+            (Optional)
+          </span>
         </Label>
         {value && (
           <Badge variant="default" className="gap-1 text-[11px]">
@@ -154,8 +186,12 @@ export default function ImageUpload({ value, onChange, disabled = false }: Image
           <div className="p-3 bg-card border-t border-border/30 flex items-center justify-between text-xs text-muted-foreground">
             <div className="flex items-center gap-2 truncate pr-2">
               <ImageIcon className="w-4 h-4 shrink-0 text-primary" />
-              <span className="truncate font-normal text-foreground">{value.name}</span>
-              <span className="shrink-0 text-muted-foreground/70">({formatFileSize(value.size)})</span>
+              <span className="truncate font-normal text-foreground">
+                {value.name}
+              </span>
+              <span className="shrink-0 text-muted-foreground/70">
+                ({formatFileSize(value.size)})
+              </span>
             </div>
 
             <Button
@@ -190,20 +226,27 @@ export default function ImageUpload({ value, onChange, disabled = false }: Image
 
           <div className="space-y-1 max-w-sm">
             <p className="text-sm font-normal text-foreground">
-              <span className="font-semibold text-primary underline underline-offset-4">Click to upload</span> or drag and drop
+              <span className="font-semibold text-primary underline underline-offset-4">
+                Click to upload
+              </span>{" "}
+              or drag and drop
             </p>
             <p className="text-xs text-muted-foreground">
-              Take or select a photo of the problem. Gemini AI will analyze it to prefill your report.
+              Take or select a photo of the problem. Gemini AI will analyze it
+              to prefill your report.
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center justify-center gap-2 pt-1" onClick={(e) => e.stopPropagation()}>
+          <div
+            className="flex flex-wrap items-center justify-center gap-2 pt-1"
+            onClick={(e) => e.stopPropagation()}
+          >
             <Button
               type="button"
               variant="outline"
               size="sm"
               disabled={disabled}
-              onClick={() => cameraInputRef.current?.click()}
+              onClick={handleTakePhotoClick}
               className="h-8 gap-1.5 text-xs bg-card"
             >
               <Camera className="w-3.5 h-3.5 text-primary" />
@@ -228,6 +271,15 @@ export default function ImageUpload({ value, onChange, disabled = false }: Image
           </p>
         </div>
       )}
+
+      <CameraModal
+        isOpen={isCameraOpen}
+        onClose={() => setIsCameraOpen(false)}
+        onCapture={handleFile}
+        title="Take Incident Photo"
+        preferredFacingMode="environment"
+        onFallbackToFileUpload={() => fileInputRef.current?.click()}
+      />
     </div>
   );
 }
