@@ -170,17 +170,15 @@ export default function ImageUpload({
               alt="Incident preview"
               className="h-full w-full object-contain"
             />
-            <Button
+            <button
               type="button"
-              variant="destructive"
-              size="icon"
               disabled={disabled}
               onClick={handleRemove}
               aria-label="Remove photo"
-              className="absolute top-3 right-3 h-8 w-8 rounded-full shadow-md hover:scale-105 transition-transform"
+              className="absolute top-3 right-3 h-8 w-8 rounded-full bg-secondary text-secondary-foreground hover:bg-secondary/80 flex items-center justify-center p-0 shadow-md hover:scale-105 transition-all cursor-pointer disabled:opacity-50 disabled:pointer-events-none border border-secondary-foreground/20"
             >
-              <X className="w-4 h-4" />
-            </Button>
+              <X className="w-4 h-4 shrink-0" />
+            </button>
           </div>
 
           <div className="p-3 bg-card border-t border-border/30 flex items-center justify-between text-xs text-muted-foreground">
