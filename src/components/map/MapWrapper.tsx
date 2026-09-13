@@ -13,12 +13,12 @@ const DynamicMap = dynamic(() => import('./Map'), {
 
 // Falling back to [0, 0] puts the viewport on Null Island, whose ocean tiles are blank,
 // making an empty marker list indistinguishable from a broken map.
-const DEFAULT_CENTER: [number, number] = [43.6532, -79.3832]
+const TORONTO: [number, number] = [43.6532, -79.3832]
 
 export default function MapWrapper() {
   const { markers } = useMarkers();
 
-  const default_position: [number, number] = markers.length ? markers[0].position : DEFAULT_CENTER
+  const default_position: [number, number] = markers.length ? markers[0].position : TORONTO
   return (
     <DynamicMap markers={markers} center={default_position}/>
   )
