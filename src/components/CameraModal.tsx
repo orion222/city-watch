@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback } from "react";
+import { createPortal } from "react-dom";
 import { Button } from "@/components/ui/button";
 import {
   Camera,
@@ -16,13 +17,21 @@ import {
   Zap,
   ZapOff,
 } from "lucide-react";
+import { useCamera, type CameraFacingMode } from "@/hooks/useCamera";
+
+interface W3CImageCapture {
+  takePhoto(photoSettings?: object): Promise<Blob>;
+}
 
 export interface CameraModalProps {
   isOpen: boolean;
   onClose: () => void;
   onCapture: (file: File) => void;
   title?: string;
-  preferredFacingMode?: "environment" | "user";
+  subtitle?: string;
+  reviewTitle?: string;
+  reviewSubtitle?: string;
+  preferredFacingMode?: CameraFacingMode;
   onFallbackToFileUpload?: () => void;
 }
 
@@ -31,36 +40,51 @@ export default function CameraModal({
   onClose,
   onCapture,
   title = "Take Incident Photo",
+  subtitle = "Center the issue in the frame",
+  reviewTitle = "Review Incident Photo",
+  reviewSubtitle = "Ensure the problem is clearly visible and in focus",
   preferredFacingMode = "environment",
   onFallbackToFileUpload,
 }: CameraModalProps) {
-  const [cameraFacing, setCameraFacing] = useState<"environment" | "user">(
-    preferredFacingMode,
-  );
-  const [availableDevices, setAvailableDevices] = useState<MediaDeviceInfo[]>(
-    [],
-  );
-  const [selectedDeviceId, setSelectedDeviceId] = useState<string | null>(null);
-  const [cameraLoading, setCameraLoading] = useState(false);
-  const [cameraError, setCameraError] = useState<string | null>(null);
-  const [retryKey, setRetryKey] = useState(0);
+  const [mounted, setMounted] = useState(false);
 
   // Industry UX Features
   const [showGrid, setShowGrid] = useState(false);
-  const [torchSupported, setTorchSupported] = useState(false);
-  const [torchOn, setTorchOn] = useState(false);
   const [isFlashing, setIsFlashing] = useState(false);
 
-  // Review / Confirmation Stage (Industry Standard Pattern)
+  // Review / Confirmation Stage State
   const [capturedFile, setCapturedFile] = useState<File | null>(null);
   const [capturedPreviewUrl, setCapturedPreviewUrl] = useState<string | null>(
     null,
   );
 
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const streamRef = useRef<MediaStream | null>(null);
+  // Mount check for safe createPortal execution in SSR Next.js
+  useEffect(() => {
+    setMounted(true);
+    return () => setMounted(false);
+  }, []);
 
-  // Clean up captured preview URL
+  // WebRTC Camera Management via custom hook
+  // When reviewing a photo, isActive: false cleanly stops stream tracks to preserve battery
+  const {
+    videoRef,
+    stream,
+    isLoading: cameraLoading,
+    error: cameraError,
+    facingMode,
+    torchSupported,
+    torchOn,
+    toggleTorch,
+    switchCamera,
+    retry,
+    stopCamera,
+  } = useCamera({
+    isOpen,
+    isActive: !capturedFile,
+    preferredFacingMode,
+  });
+
+  // Clean up captured preview URL on unmount or URL change
   useEffect(() => {
     return () => {
       if (capturedPreviewUrl) {
@@ -69,47 +93,13 @@ export default function CameraModal({
     };
   }, [capturedPreviewUrl]);
 
-  // Reset states when modal opens
+  // Reset captured state when modal opens
   useEffect(() => {
     if (isOpen) {
-      setCameraFacing(preferredFacingMode);
-      setSelectedDeviceId(null);
       setCapturedFile(null);
       setCapturedPreviewUrl(null);
-      setTorchOn(false);
     }
-  }, [isOpen, preferredFacingMode]);
-
-  // Enumerate video input devices
-  const refreshDevices = useCallback(async () => {
-    if (
-      typeof navigator === "undefined" ||
-      typeof navigator.mediaDevices?.enumerateDevices !== "function"
-    ) {
-      return;
-    }
-    try {
-      const devices = await navigator.mediaDevices.enumerateDevices();
-      const videoInputs = devices.filter((d) => d.kind === "videoinput");
-      setAvailableDevices(videoInputs);
-    } catch (e) {
-      console.warn("Could not enumerate camera devices:", e);
-    }
-  }, []);
-
-  const stopCamera = useCallback(() => {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((track) => track.stop());
-      streamRef.current = null;
-    }
-    if (videoRef.current) {
-      videoRef.current.srcObject = null;
-    }
-    setCameraLoading(false);
-    setCameraError(null);
-    setTorchOn(false);
-    setTorchSupported(false);
-  }, []);
+  }, [isOpen]);
 
   const handleClose = useCallback(() => {
     stopCamera();
@@ -121,123 +111,7 @@ export default function CameraModal({
     onClose();
   }, [stopCamera, capturedPreviewUrl, onClose]);
 
-  // Media Stream Lifecycle Manager
-  useEffect(() => {
-    if (!isOpen) {
-      stopCamera();
-      return;
-    }
-
-    // If reviewing a photo, keep stream paused or stopped to conserve battery
-    if (capturedFile) return;
-
-    let activeStream: MediaStream | null = null;
-    setCameraLoading(true);
-    setCameraError(null);
-
-    const videoConstraints: MediaTrackConstraints = selectedDeviceId
-      ? {
-          deviceId: { exact: selectedDeviceId },
-          width: { ideal: 1920 },
-          height: { ideal: 1080 },
-        }
-      : {
-          facingMode: { ideal: cameraFacing },
-          width: { ideal: 1920 },
-          height: { ideal: 1080 },
-        };
-
-    const constraints: MediaStreamConstraints = {
-      video: videoConstraints,
-      audio: false,
-    };
-
-    if (
-      typeof navigator === "undefined" ||
-      typeof navigator.mediaDevices?.getUserMedia !== "function"
-    ) {
-      setCameraError(
-        "Camera access is not supported on this browser or requires a secure (HTTPS) connection.",
-      );
-      setCameraLoading(false);
-      return;
-    }
-
-    navigator.mediaDevices
-      .getUserMedia(constraints)
-      .then(async (stream) => {
-        activeStream = stream;
-        streamRef.current = stream;
-
-        if (videoRef.current) {
-          videoRef.current.srcObject = stream;
-          try {
-            await videoRef.current.play();
-          } catch (err) {
-            console.warn("Video autoplay interrupted:", err);
-          }
-        }
-
-        // Check hardware capabilities (torch / flashlight)
-        const track = stream.getVideoTracks()[0];
-        if (track && typeof track.getCapabilities === "function") {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const capabilities = track.getCapabilities() as any;
-          setTorchSupported(Boolean(capabilities?.torch));
-        }
-
-        // Refresh enumerated devices now that permission is granted
-        refreshDevices();
-        setCameraLoading(false);
-      })
-      .catch((err: unknown) => {
-        console.error("Camera access error:", err);
-        let message = "Unable to access the camera.";
-        if (err instanceof Error) {
-          if (
-            err.name === "NotAllowedError" ||
-            err.name === "PermissionDeniedError"
-          ) {
-            message =
-              "Camera permission was denied. Please allow camera access in your browser settings.";
-          } else if (
-            err.name === "NotFoundError" ||
-            err.name === "DevicesNotFoundError"
-          ) {
-            message = "No camera was detected on this device.";
-          } else if (
-            err.name === "NotReadableError" ||
-            err.name === "TrackStartError"
-          ) {
-            message = "Camera is currently being used by another application.";
-          } else {
-            message = err.message || message;
-          }
-        }
-        setCameraError(message);
-        setCameraLoading(false);
-      });
-
-    return () => {
-      if (activeStream) {
-        activeStream.getTracks().forEach((track) => track.stop());
-      }
-      if (streamRef.current) {
-        streamRef.current.getTracks().forEach((track) => track.stop());
-        streamRef.current = null;
-      }
-    };
-  }, [
-    isOpen,
-    cameraFacing,
-    selectedDeviceId,
-    retryKey,
-    capturedFile,
-    stopCamera,
-    refreshDevices,
-  ]);
-
-  // Keyboard shortcut listener (ESC to exit)
+  // Dismiss on ESC key
   useEffect(() => {
     if (!isOpen) return;
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -249,52 +123,25 @@ export default function CameraModal({
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [isOpen, handleClose]);
 
-  // Toggle Torch / Flashlight
-  const handleToggleTorch = async () => {
-    if (!streamRef.current || !torchSupported) return;
-    const track = streamRef.current.getVideoTracks()[0];
-    if (!track) return;
-    const nextState = !torchOn;
-    try {
-      await track.applyConstraints({
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        advanced: [{ torch: nextState } as any],
-      });
-      setTorchOn(nextState);
-    } catch (e) {
-      console.warn("Failed to toggle camera torch:", e);
+  // Dismiss on clicking backdrop
+  const handleBackdropClick = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (e.target === e.currentTarget) {
+      handleClose();
     }
   };
 
-  // Switch between available cameras
-  const handleToggleCamera = () => {
-    if (availableDevices.length > 1) {
-      const currentIndex = availableDevices.findIndex(
-        (d) => d.deviceId === selectedDeviceId,
-      );
-      const nextIndex = (currentIndex + 1) % availableDevices.length;
-      setSelectedDeviceId(availableDevices[nextIndex].deviceId);
-    } else {
-      setCameraFacing((prev) =>
-        prev === "environment" ? "user" : "environment",
-      );
-      setSelectedDeviceId(null);
-    }
-  };
-
-  // Industry Standard Capture Engine (ImageCapture API with High-Res Canvas Fallback)
+  // Photo Capture Engine (ImageCapture API with high-resolution canvas fallback)
   const capturePhoto = useCallback(async () => {
-    if (!videoRef.current || !streamRef.current) return;
     const video = videoRef.current;
-    const stream = streamRef.current;
+    if (!video || !stream) return;
     const track = stream.getVideoTracks()[0];
     if (!track) return;
 
-    // 1. Visual Shutter Flash Feedback
+    // Visual Shutter Flash Pulse
     setIsFlashing(true);
     setTimeout(() => setIsFlashing(false), 120);
 
-    // 2. Subtle Haptic Feedback
+    // Subtle Haptic Feedback
     if (
       typeof navigator !== "undefined" &&
       typeof navigator.vibrate === "function"
@@ -302,18 +149,30 @@ export default function CameraModal({
       try {
         navigator.vibrate([40]);
       } catch {
-        // Ignore haptic vibration errors
+        // Ignore haptic feedback errors
       }
     }
 
     try {
       let photoBlob: Blob | null = null;
 
-      // 3. Modern W3C ImageCapture API (Chromium / Android standard: captures native sensor resolution)
-      if (typeof window !== "undefined" && "ImageCapture" in window) {
+      // 1. W3C ImageCapture API (hardware sensor native resolution)
+      if (
+        typeof window !== "undefined" &&
+        "ImageCapture" in window &&
+        typeof (
+          window as unknown as {
+            ImageCapture: new (t: MediaStreamTrack) => W3CImageCapture;
+          }
+        ).ImageCapture === "function"
+      ) {
         try {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          const imageCapture = new (window as any).ImageCapture(track);
+          const ImageCaptureConstructor = (
+            window as unknown as {
+              ImageCapture: new (t: MediaStreamTrack) => W3CImageCapture;
+            }
+          ).ImageCapture;
+          const imageCapture = new ImageCaptureConstructor(track);
           photoBlob = await imageCapture.takePhoto();
         } catch (imageCaptureErr) {
           console.warn(
@@ -323,7 +182,7 @@ export default function CameraModal({
         }
       }
 
-      // 4. High-Res Canvas Fallback (iOS Safari, Firefox, or when ImageCapture is unavailable)
+      // 2. High-Resolution Canvas Fallback (Safari, Firefox, or unsupported devices)
       if (!photoBlob) {
         if (video.videoWidth === 0 || video.videoHeight === 0) return;
         const canvas = document.createElement("canvas");
@@ -332,8 +191,8 @@ export default function CameraModal({
         const ctx = canvas.getContext("2d");
         if (!ctx) return;
 
-        // Mirror front camera capture so result matches mirrored viewfinder
-        if (cameraFacing === "user") {
+        // Mirror front camera capture to match mirrored viewfinder
+        if (facingMode === "user") {
           ctx.translate(canvas.width, 0);
           ctx.scale(-1, 1);
         }
@@ -358,9 +217,9 @@ export default function CameraModal({
     } catch (err) {
       console.error("Error capturing photo:", err);
     }
-  }, [cameraFacing]);
+  }, [facingMode, stream, videoRef]);
 
-  // Review Screen: Retake photo
+  // Retake photo: clear snapshot and re-engage stream
   const handleRetake = () => {
     if (capturedPreviewUrl) {
       URL.revokeObjectURL(capturedPreviewUrl);
@@ -369,7 +228,7 @@ export default function CameraModal({
     setCapturedPreviewUrl(null);
   };
 
-  // Review Screen: Confirm and use photo
+  // Confirm photo: emit File and close modal
   const handleConfirmPhoto = () => {
     if (capturedFile) {
       onCapture(capturedFile);
@@ -377,13 +236,14 @@ export default function CameraModal({
     }
   };
 
-  if (!isOpen) return null;
+  if (!isOpen || !mounted) return null;
 
-  return (
+  const modalContent = (
     <div
       role="dialog"
       aria-modal="true"
-      aria-label="Camera Viewfinder"
+      aria-label={title}
+      onClick={handleBackdropClick}
       className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex items-center justify-center p-4 sm:p-6 animate-in fade-in duration-200"
     >
       <div className="relative w-full max-w-lg bg-zinc-950 border border-zinc-800 rounded-3xl overflow-hidden shadow-2xl flex flex-col">
@@ -396,7 +256,7 @@ export default function CameraModal({
             <div>
               <div className="flex items-center gap-2">
                 <span className="font-semibold text-sm">
-                  {capturedFile ? "Review Incident Photo" : title}
+                  {capturedFile ? reviewTitle : title}
                 </span>
                 {!capturedFile && !cameraLoading && !cameraError && (
                   <span className="inline-flex items-center gap-1.5 px-2 h-5 rounded-full bg-red-500/15 text-red-400 border border-red-500/30 select-none">
@@ -407,16 +267,16 @@ export default function CameraModal({
                   </span>
                 )}
                 {capturedFile && (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-medium bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                    PREVIEW
+                  <span className="inline-flex items-center gap-1.5 px-2 h-5 rounded-full bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 select-none">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" />
+                    <span className="text-[10px] font-bold tracking-wider leading-none">
+                      PREVIEW
+                    </span>
                   </span>
                 )}
               </div>
               <p className="text-[11px] text-zinc-400">
-                {capturedFile
-                  ? "Ensure the problem is clearly visible and in focus"
-                  : "Center the issue in the frame"}
+                {capturedFile ? reviewSubtitle : subtitle}
               </p>
             </div>
           </div>
@@ -425,13 +285,13 @@ export default function CameraModal({
             {/* Viewfinder Controls (Only visible during live capture) */}
             {!capturedFile && (
               <>
-                {/* Torch / Flash Toggle */}
+                {/* Torch / Flashlight Toggle */}
                 {torchSupported && (
                   <Button
                     type="button"
                     variant="ghost"
                     size="icon"
-                    onClick={handleToggleTorch}
+                    onClick={toggleTorch}
                     className={`h-8 w-8 rounded-full ${
                       torchOn
                         ? "text-yellow-400 bg-yellow-400/10"
@@ -502,7 +362,7 @@ export default function CameraModal({
                 playsInline
                 muted
                 className={`w-full h-full object-cover ${
-                  cameraFacing === "user" ? "-scale-x-100" : ""
+                  facingMode === "user" ? "-scale-x-100" : ""
                 }`}
               />
 
@@ -522,13 +382,13 @@ export default function CameraModal({
                   <div className="border-r border-b border-white/20" />
                   <div className="border-r border-b border-white/20" />
                   <div className="border-b border-white/20" />
-                  <div className="border-r border-white/20" />
-                  <div className="border-r border-white/20" />
+                  <div className="border-r border-b border-white/20" />
+                  <div className="border-r border-b border-white/20" />
                   <div />
                 </div>
               )}
 
-              {/* Viewfinder Center Framing Brackets (Vector SVG: clean lines, zero phantom borders) */}
+              {/* Viewfinder Center Framing Brackets (Vector SVG: zero phantom borders) */}
               {!cameraLoading && !cameraError && (
                 <div className="absolute inset-8 sm:inset-10 pointer-events-none flex flex-col justify-between">
                   <div className="flex justify-between">
@@ -618,7 +478,7 @@ export default function CameraModal({
                       type="button"
                       variant="outline"
                       size="sm"
-                      onClick={() => setRetryKey((k) => k + 1)}
+                      onClick={retry}
                       className="text-xs border-zinc-700 bg-zinc-900 text-zinc-200 hover:bg-zinc-800"
                     >
                       <RefreshCw className="w-3.5 h-3.5 mr-1.5" />
@@ -679,13 +539,13 @@ export default function CameraModal({
                 variant="ghost"
                 size="sm"
                 disabled={cameraLoading || Boolean(cameraError)}
-                onClick={handleToggleCamera}
+                onClick={switchCamera}
                 className="text-xs text-zinc-300 hover:text-white hover:bg-zinc-800 gap-1.5 rounded-lg"
                 title="Switch Camera (Front/Back/External)"
               >
                 <SwitchCamera className="w-4 h-4 text-primary" />
                 <span className="hidden sm:inline">
-                  {cameraFacing === "environment" ? "Front" : "Back"}
+                  {facingMode === "environment" ? "Front" : "Back"}
                 </span>
               </Button>
 
@@ -716,4 +576,6 @@ export default function CameraModal({
       </div>
     </div>
   );
+
+  return createPortal(modalContent, document.body);
 }
