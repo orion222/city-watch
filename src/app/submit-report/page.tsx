@@ -59,7 +59,6 @@ function LocationAutocomplete({
 
   const apiKey = NEXT_PUBLIC_GEOAPIFY_API_KEY; // same source as your JSONViewer
 
-  // Build direct Geoapify /geocode/search URL (no country filter)
   const url = useMemo(() => {
     const q = value.trim();
     setError(null);

@@ -43,6 +43,7 @@ function LocationMarker() {
   )
 }
 
+const basemapURL = `https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png?key=${process.env.NEXT_PUBLIC_CARTO_API_KEY}`
 export default function Map({ markers, center }: MapProps) {
   const { setActiveMarker } = useMarkers();
   return (
@@ -54,7 +55,7 @@ export default function Map({ markers, center }: MapProps) {
     >
       <TileLayer
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-        url='https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png'
+        url={basemapURL}
       />
       {
       markers.map(function(marker, idx) {
