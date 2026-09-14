@@ -46,7 +46,7 @@ function LocationAutocomplete({
 }: {
   value: string;
   onChange: (v: string) => void;
-  onPick: (label: string, coords: [number, number]) => void; // [lon, lat]
+  onPick: (label: string, coords: [number, number]) => void; // [lat, lon]
   required?: boolean;
   limit?: number;
   debounceMs?: number;
@@ -157,7 +157,7 @@ function LocationAutocomplete({
 
   const pick = (it: { label: string; lon: number; lat: number }) => {
     if (value === it.label) return; // Prevent redundant updates
-    onPick(it.label, [it?.lon ?? 0, it?.lat ?? 0]);
+    onPick(it.label, [it?.lat ?? 0, it?.lon ?? 0]);
     setOpen(false);
   };
 
@@ -334,10 +334,28 @@ export default function SubmitReportPage() {
         try {
           const errData = await response.json();
           if (errData?.detail) {
-            detail =
-              typeof errData.detail === "string"
-                ? errData.detail
-                : JSON.stringify(errData.detail);
+            if (typeof errData.detail === "object" && errData.detail !== null) {
+              detail = errData.detail.message || JSON.stringify(errData.detail);
+
+              // Non-destructive prefilling: only prefill empty fields with Gemini's response
+              if (errData.detail.extracted_data) {
+                const ext = errData.detail.extracted_data;
+                setFormData((prev) => ({
+                  ...prev,
+                  description: prev.description?.trim()
+                    ? prev.description
+                    : (ext.description || ""),
+                  status: prev.status?.trim()
+                    ? prev.status
+                    : (ext.urgency || ""),
+                  location: prev.location?.trim()
+                    ? prev.location
+                    : (ext.address || ""),
+                }));
+              }
+            } else if (typeof errData.detail === "string") {
+              detail = errData.detail;
+            }
           } else if (errData?.error) {
             detail = errData.error;
           }
@@ -430,11 +448,11 @@ export default function SubmitReportPage() {
             <LocationAutocomplete
               value={formData.location}
               onChange={(val) => handleInputChange("location", val)}
-              onPick={(label, [lon, lat]) =>
+              onPick={(label, [lat, lon]) =>
                 setFormData((prev) => ({
                   ...prev,
                   location: label,
-                  position: [lon ?? 0, lat ?? 0],
+                  position: [lat ?? 0, lon ?? 0],
                 }))
               }
               labelText={
