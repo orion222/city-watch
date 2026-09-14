@@ -8,9 +8,21 @@ interface PopupDetailProps {
 }
 
 export default function PopupDetail({ data }: PopupDetailProps) {
-  const timestamp = new Date(data.timestamp)
+  const timestamp = new Date(data.timestamp);
   return (
     <div className="flex flex-col space-y-2 p-2 min-w-[200px]">
+      {data.image_url && (
+        <div className="w-full h-28 overflow-hidden rounded-md bg-black/5 mb-1">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={data.image_url}
+            alt={data.title || "Incident image"}
+            className="w-full h-full object-cover rounded-md"
+            loading="lazy"
+          />
+        </div>
+      )}
+
       <div className="flex flex-col">
         <span className="text-sm font-semibold text-gray-700">Report ID</span>
         <span className="text-sm text-gray-900">{data.id}</span>
