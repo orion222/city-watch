@@ -11,4 +11,5 @@ export interface MarkerData {
   timestamp: string
   address_id: number | null
   address: { [key: string]: string | number | null }
+  image_url?: string | null;
 }

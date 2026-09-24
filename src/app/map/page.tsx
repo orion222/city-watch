@@ -47,7 +47,7 @@ export function MapPage() {
 
 
   return (
-    <div className="font-sans bg-background min-h-screen">
+    <div className="font-sans bg-background min-h-screen overflow-x-hidden">
       <main>
         <section className="relative overflow-hidden">
           {/* Map-themed background pattern */}
@@ -80,7 +80,7 @@ export function MapPage() {
           </div>
         </section>
 
-        <div className="h-[500px] w-full relative">
+        <div className="h-[500px] w-full relative overflow-x-hidden">
           <MapWrapper/>
           <MapInfoPanel />
         </div>
