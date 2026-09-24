@@ -14,6 +14,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { MarkerData } from "../types/Marker"
+import ImageModal from './ImageModal';
 
 type Address = {
   street?: string | null;
@@ -270,32 +271,13 @@ export default function MapInfoPanel() {
       )}
 
       {/* Full Photo Modal */}
-      {isImageModalOpen && activeMarker?.image_url && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-xs p-4 animate-fadeIn"
-          onClick={() => setIsImageModalOpen(false)}
-        >
-          <div
-            className="relative max-w-2xl max-h-[85vh] overflow-hidden rounded-2xl bg-card p-2 shadow-2xl"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={activeMarker.image_url}
-              alt={activeMarker.title || "Incident photo full preview"}
-              className="max-h-[80vh] w-auto rounded-xl object-contain"
-            />
-            <button
-              type="button"
-              onClick={() => setIsImageModalOpen(false)}
-              className="absolute top-4 right-4 w-8 h-8 rounded-full bg-black/60 hover:bg-black text-white flex items-center justify-center shadow transition-colors"
-              aria-label="Close photo"
-            >
-              ✕
-            </button>
-          </div>
-        </div>
-      )}
+      <ImageModal
+        isOpen={isImageModalOpen}
+        onClose={() => setIsImageModalOpen(false)}
+        imageUrl={activeMarker?.image_url}
+        altText={activeMarker?.title || "Incident photo full preview"}
+        title={activeMarker?.title}
+      />
     </div>
   );
 }
